@@ -17,7 +17,7 @@ public class App
             bot.registerBot(new PhishingBot());
             
         } catch (Exception e) {
-            e.printStackTrace();
+            System.out.println(e.getMessage());
         }
     }
 }

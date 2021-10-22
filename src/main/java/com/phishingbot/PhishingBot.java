@@ -1,31 +1,32 @@
 package com.phishingbot;
 
+import com.squareup.okhttp.MultipartBuilder;
+import com.squareup.okhttp.OkHttpClient;
+import com.squareup.okhttp.Request;
+import com.squareup.okhttp.RequestBody;
+import com.squareup.okhttp.Response;
+
 import org.apache.commons.validator.routines.UrlValidator;
 import org.telegram.telegrambots.bots.TelegramLongPollingBot;
 import org.telegram.telegrambots.meta.api.methods.send.SendMessage;
 import org.telegram.telegrambots.meta.api.objects.Update;
 import org.telegram.telegrambots.meta.exceptions.TelegramApiException;
-import org.apache.http.HttpEntity;
-import org.apache.http.client.methods.CloseableHttpResponse;
-import org.apache.http.client.methods.HttpPost;
-import org.apache.http.entity.mime.MultipartEntityBuilder;
-import org.apache.http.impl.client.CloseableHttpClient;
-import org.apache.http.impl.client.HttpClients;
-import org.apache.http.util.EntityUtils;
 import org.json.JSONObject;
 
 
 public class PhishingBot extends TelegramLongPollingBot {
 
     private final String BOT_NAME = "PhishingBot";
-    private final String BOT_TOKEN = "";
+    private final String BOT_TOKEN = "2097646910:AAFjCPbXYldU5CedABJ1IXqtO9pRRy8PgsM";
     private final String[] VALID_SCHEME_VALIDATOR = { "http", "https" };
     private final String API_URL = "https://urlhaus-api.abuse.ch/v1/url/";
+    private OkHttpClient Client;
 
-    private UrlValidator urlValidator;
+    private UrlValidator UrlValidator;
 
     public PhishingBot() {
-        this.urlValidator = new UrlValidator(VALID_SCHEME_VALIDATOR);
+        this.UrlValidator = new UrlValidator(VALID_SCHEME_VALIDATOR);
+        this.Client = new OkHttpClient();
     }
 
     @Override
@@ -40,7 +41,9 @@ public class PhishingBot extends TelegramLongPollingBot {
 
             if(IsValidUrl(url)) {
 
-                CheckIfIsPhishing(url);
+                String messageText = CheckIfIsPhishing(url);
+                
+                message.setText(messageText);
 
             } else {
                 message.setText("Url Non Valido");
@@ -51,7 +54,7 @@ public class PhishingBot extends TelegramLongPollingBot {
             try {
                 execute(message); // Call method to send the message
             } catch (TelegramApiException e) {
-                e.printStackTrace();
+                System.out.println(e.getMessage());
             }
         }
            
@@ -65,16 +68,16 @@ public class PhishingBot extends TelegramLongPollingBot {
 
             JSONObject json = MakeRequest(url);
 
-            if(json.getString("query_status") == "no_results")  {
+            if(json.getString("query_status").equals("no_results") )  {
                 message = "Non ho risultati per questo sito. Se sei sicuro che sia un sito Phishing aggiungilo <a href=\"https://urlhaus.abuse.ch/browse/\">qui</a>";    
-            } else if(json.getString("query_status") == "ok")  {
+            } else if(json.getString("query_status").equals("ok"))  {
                 
                 JSONObject blacklists = json.getJSONObject("blacklists");
 
                 String spamhausDbl = blacklists.getString("spamhaus_dbl");
                 String surbl = blacklists.getString("surbl");
 
-                if(surbl == "not listed" && spamhausDbl == "not listed") {
+                if(this.IsNotListed(surbl) && this.IsNotListed(spamhausDbl)) {
                     message = "Il sito è sicuro";
                 } else {
                     message = "L'url che hai inviato è un sito Phising, fai attenzione non cliccarlo o inserire dati all'interno";
@@ -82,7 +85,7 @@ public class PhishingBot extends TelegramLongPollingBot {
             }
 
         } catch(Exception e) {
-            e.printStackTrace();
+            System.out.println(e.getMessage());
         }
 
         return message;
@@ -90,41 +93,36 @@ public class PhishingBot extends TelegramLongPollingBot {
     }
 
     private JSONObject MakeRequest(String url) throws Exception{
+
+        RequestBody body = new MultipartBuilder()
+            .type(MultipartBuilder.FORM)
+            .addFormDataPart("url", url).build();
+
+        Request request = new Request.Builder()
+            .url(this.API_URL)
+            .post(body)
+            .header("Content-Type", "multipart/form-data")
+            .build();
         
+        Response response = this.Client.newCall(request).execute();
 
-        CloseableHttpClient httpClient = HttpClients.createDefault();
-    
-        HttpPost postRequest = new HttpPost(API_URL);
-        
-        MultipartEntityBuilder builder = MultipartEntityBuilder.create();
+        String jsonResponse = response.body().string();
 
-        builder.addTextBody("url", url);
-
-        HttpEntity multipart = builder.build();
-
-        postRequest.setEntity(multipart);
-
-        CloseableHttpResponse response = httpClient.execute(postRequest);
-
-        HttpEntity entityResponse = response.getEntity();
-
-        if(entityResponse == null) {
-            throw new Exception();
+        if(jsonResponse.equals("")) {
+            return new JSONObject();
         }
 
-        String responseString = EntityUtils.toString(entityResponse);
-
-        JSONObject json = new JSONObject(responseString);
+        JSONObject json = new JSONObject(jsonResponse);
 
         return json;
-
-
-        
     }
 
+    private boolean IsNotListed(String property) {
+        return property.equals("not listed");
+    }
 
     private boolean IsValidUrl(String url) {
-        return urlValidator.isValid(url);
+        return UrlValidator.isValid(url);
     }
 
 
