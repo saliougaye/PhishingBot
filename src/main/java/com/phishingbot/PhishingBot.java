@@ -13,11 +13,12 @@ import org.telegram.telegrambots.meta.api.objects.Update;
 import org.telegram.telegrambots.meta.exceptions.TelegramApiException;
 import org.json.JSONObject;
 
+import com.phishingbot.Messages.ResponseMessages;
 
 public class PhishingBot extends TelegramLongPollingBot {
 
     private final String BOT_NAME = "PhishingBot";
-    private final String BOT_TOKEN = "2097646910:AAFjCPbXYldU5CedABJ1IXqtO9pRRy8PgsM";
+    private final String BOT_TOKEN = "";
     private final String[] VALID_SCHEME_VALIDATOR = { "http", "https" };
     private final String API_URL = "https://urlhaus-api.abuse.ch/v1/url/";
     private OkHttpClient Client;
@@ -33,7 +34,7 @@ public class PhishingBot extends TelegramLongPollingBot {
     public void onUpdateReceived(Update update) {
         
         if (update.hasMessage() && update.getMessage().hasText()) {
-            SendMessage message = new SendMessage(); // Create a SendMessage object with mandatory fields
+            SendMessage message = new SendMessage();
             message.enableHtml(true);
             message.setChatId(update.getMessage().getChatId().toString());
             
@@ -46,13 +47,13 @@ public class PhishingBot extends TelegramLongPollingBot {
                 message.setText(messageText);
 
             } else {
-                message.setText("Url Non Valido");
+                message.setText(ResponseMessages.URL_NOT_VALID);
             }
 
             
             
             try {
-                execute(message); // Call method to send the message
+                execute(message);
             } catch (TelegramApiException e) {
                 System.out.println(e.getMessage());
             }
@@ -62,15 +63,17 @@ public class PhishingBot extends TelegramLongPollingBot {
 
     private String CheckIfIsPhishing(String url) {
 
-        String message = "Non sono riuscito a fare i controlli. Riprova.";
+        String message = ResponseMessages.ERROR_RETRY;
 
         try {
 
             JSONObject json = MakeRequest(url);
+            
+            String queryStatus = json.getString("query_status");
 
-            if(json.getString("query_status").equals("no_results") )  {
-                message = "Non ho risultati per questo sito. Se sei sicuro che sia un sito Phishing aggiungilo <a href=\"https://urlhaus.abuse.ch/browse/\">qui</a>";    
-            } else if(json.getString("query_status").equals("ok"))  {
+            if( this.IsNoResults(queryStatus) )  {
+                message = ResponseMessages.NO_RESULTS;    
+            } else if( this.IsOk(queryStatus) )  {
                 
                 JSONObject blacklists = json.getJSONObject("blacklists");
 
@@ -78,9 +81,9 @@ public class PhishingBot extends TelegramLongPollingBot {
                 String surbl = blacklists.getString("surbl");
 
                 if(this.IsNotListed(surbl) && this.IsNotListed(spamhausDbl)) {
-                    message = "Il sito è sicuro";
+                    message = ResponseMessages.SECURED;
                 } else {
-                    message = "L'url che hai inviato è un sito Phising, fai attenzione non cliccarlo o inserire dati all'interno";
+                    message = ResponseMessages.NOT_SECURE;
                 }
             }
 
@@ -115,6 +118,14 @@ public class PhishingBot extends TelegramLongPollingBot {
         JSONObject json = new JSONObject(jsonResponse);
 
         return json;
+    }
+
+    private boolean IsNoResults(String queryStatus) {
+        return queryStatus.equals("no_results");
+    }
+
+    private boolean IsOk(String queryStatus) {
+        return queryStatus.equals("ok");
     }
 
     private boolean IsNotListed(String property) {
