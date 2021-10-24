@@ -11,7 +11,12 @@ import org.telegram.telegrambots.bots.TelegramLongPollingBot;
 import org.telegram.telegrambots.meta.api.methods.send.SendMessage;
 import org.telegram.telegrambots.meta.api.objects.Update;
 import org.telegram.telegrambots.meta.exceptions.TelegramApiException;
+
+import javassist.bytecode.stackmap.TypeData.ClassName;
+
 import org.json.JSONObject;
+
+import java.util.logging.Logger;
 
 import com.phishingbot.Messages.ResponseMessages;
 
@@ -21,19 +26,26 @@ public class PhishingBot extends TelegramLongPollingBot {
     private final String BOT_TOKEN = "";
     private final String[] VALID_SCHEME_VALIDATOR = { "http", "https" };
     private final String API_URL = "https://urlhaus-api.abuse.ch/v1/url/";
+    private final Logger LOGGER = Logger.getLogger( ClassName.class.getName() );
+
     private OkHttpClient Client;
 
     private UrlValidator UrlValidator;
 
     public PhishingBot() {
+        LOGGER.info(" BOT STARTED ");
+
         this.UrlValidator = new UrlValidator(VALID_SCHEME_VALIDATOR);
         this.Client = new OkHttpClient();
     }
 
     @Override
     public void onUpdateReceived(Update update) {
-        
+
         if (update.hasMessage() && update.getMessage().hasText()) {
+
+            LOGGER.info(update.getUpdateId() +  "| NEW MESSAGE | " + update.getMessage().getChatId() + " | " + update.getMessage().getText());
+
             SendMessage message = new SendMessage();
             message.enableHtml(true);
             message.setChatId(update.getMessage().getChatId().toString());
@@ -55,8 +67,10 @@ public class PhishingBot extends TelegramLongPollingBot {
             try {
                 execute(message);
             } catch (TelegramApiException e) {
-                System.out.println(e.getMessage());
+                LOGGER.severe(e.toString());
             }
+
+            LOGGER.info(update.getUpdateId() +  "| MESSAGE PROCESSED | " + update.getMessage().getChatId() + " | " + update.getMessage().getText());
         }
            
     }
@@ -88,7 +102,7 @@ public class PhishingBot extends TelegramLongPollingBot {
             }
 
         } catch(Exception e) {
-            System.out.println(e.getMessage());
+            LOGGER.severe(e.toString());
         }
 
         return message;
@@ -108,6 +122,12 @@ public class PhishingBot extends TelegramLongPollingBot {
             .build();
         
         Response response = this.Client.newCall(request).execute();
+
+        int statusCode = response.code();
+        
+        if(statusCode >= 400) {
+            return new JSONObject();
+        }
 
         String jsonResponse = response.body().string();
 
